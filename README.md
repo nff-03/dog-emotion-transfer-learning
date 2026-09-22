@@ -1,63 +1,51 @@
-# Cross-Species Emotion Recognition in Animals via Domain-Adaptive Transfer Learning
+# Cross-Domain Affective Transfer Learning: Dog Emotion Classification
 
-This repository contains the complete PyTorch implementation, training pipelines, and automated hyperparameter optimization experiments for investigating cross-species affective computing[cite: 11, 12, 13, 14, 16]. Specifically, this project evaluates domain-adaptive transfer learning by comparing feature transferability from human facial affect models (**AffectNet**) against standard generic visual representations (**ImageNet**) on canine facial expressions.
+This repository investigates cross-domain transfer learning efficacy on canine affective states using deep convolutional neural networks[cite: 16]. We evaluate whether feature representations pretrained on human facial affect (**AffectNet**) generalize better to animal expressions than representations learned on generic natural objects (**ImageNet**)[cite: 16].
 
-All data pipelines, layer surgery, Optuna Bayesian optimization routines, and training scripts in this repository were independently designed and developed[cite: 11, 12, 13, 14, 15].
+The project implements automated Bayesian hyperparameter tuning via **Optuna** to optimize learning rate, regularization, layer freezing depth, and optimization algorithms across both paradigms[cite: 16].
 
----
-
-## Key Experimental Findings
-
-* **ImageNet Initialization (Non-Domain Adaptive Baseline):** Reached a peak validation accuracy of **88.38%**, converging at Epoch 11. Training loss decreased from 0.8953 to 0.0043 across 18 epochs before early stopping triggered at Epoch 18[cite: 16].
-* **AffectNet Initialization (Domain-Adaptive Transfer):** Achieved a validation accuracy of **74.38%**, converging at Epoch 21 (early stopping triggered at Epoch 28)[cite: 16]. 
-* **Loss-Accuracy Divergence Phenomenon:** While AffectNet training loss steadily declined to 0.0286, validation loss escalated to 1.3456 past Epoch 15 while validation accuracy continued rising to its peak at Epoch 21[cite: 16]. This demonstrates surrogate loss behavior where penalization on hard/outlier misclassifications increases without degrading top-1 discrete classification performance[cite: 16].
-* **Structural Plasticity Requirements:** ImageNet weights converged optimally with a rigid backbone (3 residual blocks frozen)[cite: 16], whereas AffectNet required higher structural plasticity (only 1 residual block frozen and a 6.7× higher dropout rate) to project human expression geometry onto canine facial anatomy[cite: 16].
+All pipeline engineering, layer surgery, Optuna tuning, and training scripts in this repository were independently developed[cite: 11, 12, 13, 14, 15].
 
 ---
 
-## Performance & Convergence Summary
+## Experimental Setup
 
-| Initialization Source | Best Validation Accuracy | Convergence Epoch | Early Stopping Epoch | Frozen Blocks | Best Optimizer | Final Learning Rate | Weight Decay | Dropout |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ImageNet Baseline** | **88.38%** | Epoch 11 | Epoch 18 | 3 (`conv2_x`, `conv3_x`, `conv4_x`) | AdamW | $9.3596 \times 10^{-5}$ | $8.94 \times 10^{-4}$ | 0.0208 |
-| **AffectNet Transfer** | **74.38%** | Epoch 21 | Epoch 28 | 1 (`conv2_x`) | AdamW | $2.8047 \times 10^{-4}$ | $9.92 \times 10^{-4}$ | 0.1393 |
+* **Architecture:** ResNet-50 backbone with custom classification head (Dropout + Fully Connected layer).
+* **Dataset:** Dog Emotion Dataset via Kaggle (classes: *angry*, *happy*, *sad*, *relaxed*)[cite: 11, 12, 13, 14, 16].
+* **Hyperparameter Optimization:** Optuna Bayesian search over:
+  * Learning rate: `[1e-5, 1e-3]` (log scale)
+  * Weight decay: `[1e-6, 1e-3]` (log scale)[cite: 13, 14]
+  * Optimizers: Adam, AdamW, SGD[cite: 13, 14]
+  * Batch sizes: 8, 16, 32[cite: 13, 14]
+  * Layer freeze depth: Blocks 0 to 3[cite: 13, 14, 16]
+  * Dropout rate: `[0.0, 0.5]`[cite: 13, 14]
+* **Training Dynamics:** Cross-Entropy Loss, `ReduceLROnPlateau` scheduling (patience=3, factor=0.5), and early stopping (patience=7)[cite: 11, 12, 16].
+
+---
+
+## Results Summary
+
+| Backbone Pretraining | Best Optimizer | Freeze Depth | Dropout | Best Val Acc (%) | Convergence Point | Early Stopping |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ImageNet (Default)** | AdamW | 3 blocks (`conv2_x`, `conv3_x`, `conv4_x`) | ~0.0208 | **88.38%** | Epoch 11 | Epoch 18 |
+| **AffectNet (Human Affect)** | AdamW | 1 block (`conv2_x`) | ~0.1393 | **74.38%** | Epoch 21 | Epoch 28 |
 
 [cite: 16]
 
----
-
-## Dataset & Preprocessing
-
-* **Dataset:** Kaggle Dog Emotion Dataset (`danielshanbalico/dog-emotion`) containing 4 target emotion classes: *happy*, *sad*, *angry*, and *relaxed*[cite: 16].
-* **Input Resolution:** Resized to $224 \times 224$ pixels[cite: 16].
-* **Normalization:** Standard ImageNet channel-wise normalization ($\mu = [0.485, 0.456, 0.406]$, $\sigma = [0.229, 0.224, 0.225]$)[cite: 16].
-* **Splits & Augmentations:** 80% train / 20% validation split, utilizing random horizontal flipping, rotation, and color jitter[cite: 16].
-
----
-
-## Architecture & Engineering Implementation
-
-The architecture replaces the standard 1000-class fully connected head of ResNet-50 with a dropout layer and a 4-unit linear projection[cite: 16]. Layer surgery was implemented to map non-standard AffectNet checkpoints into torchvision-compatible state dict keys.
-
-Hyperparameter configurations were obtained via 50 Optuna trials evaluating[cite: 16]:
-* **Optimizers:** Adam, AdamW, SGD[cite: 13, 14, 16]
-* **Learning Rates:** Log-uniform continuous search $\left[10^{-5}, 10^{-3}\right]$
-* **Weight Decay:** Log-uniform continuous search $\left[10^{-6}, 10^{-3}\right]$[cite: 13, 14]
-* **Batch Sizes:** Categorical selection $\in \{8, 16, 32\}$[cite: 13, 14]
-* **Freeze Depths:** Discrete layer freezing $\in \{0, 1, 2, 3\}$ residual blocks[cite: 13, 14, 16]
-* **Regularization:** Fully connected dropout rate $\in [0.0, 0.5]$[cite: 13, 14]
-
-The training loop implements Cross-Entropy Loss, `ReduceLROnPlateau` dynamic scheduling (factor=0.5, patience=3 epochs), and early stopping (patience=7 epochs).
+### Key Observations
+* **ImageNet Baseline:** Converged rapidly at Epoch 11 with training loss declining from 0.8953 down to 0.0043, showing that broad object features establish a strong baseline for facial geometry[cite: 16].
+* **AffectNet Transfer:** Reached peak validation accuracy of 74.38% at Epoch 21 while validation loss climbed to 1.3456[cite: 16]. This highlights surrogate loss behavior where increasing cross-entropy penalty from confident outlier errors does not prevent the model from improving top-1 discrete classification accuracy[cite: 16].
+* **Backbone Plasticity:** ImageNet converged best with 3 frozen residual blocks, whereas AffectNet required high structural plasticity (only 1 frozen block and a higher dropout rate) to map human emotion features onto canine anatomy[cite: 16].
 
 ---
 
 ## Repository Structure
 
 ```text
-├── train_ImageNet.py          # Training pipeline for ImageNet baseline
-├── train_AffectNet.py         # Training pipeline for AffectNet transfer model
-├── tune_ImageNet.py           # Optuna Bayesian search for ImageNet weights
-├── tune_AffectNet.py          # Optuna Bayesian search for AffectNet weights
+├── train_ImageNet.py          # Fine-tuning pipeline using ImageNet weights
+├── train_AffectNet.py         # Fine-tuning pipeline using AffectNet weights
+├── tune_ImageNet.py           # Optuna study for ImageNet backbone
+├── tune_AffectNet.py          # Optuna study for AffectNet backbone
 ├── inspect_weights.ipynb      # State-dict inspection and layer verification
-├── requirements.txt           # Python package dependencies
+├── requirements.txt           # Package dependencies
 └── README.md
